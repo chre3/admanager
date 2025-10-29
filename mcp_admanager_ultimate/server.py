@@ -28,6 +28,7 @@ except ImportError:
 
 from google.auth import default
 from google.auth.transport.requests import Request
+from google.oauth2 import service_account
 
 class MCPAdManagerEnhancedUltimateServer:
     """Google Ad Manager 增强终极优化版MCP服务器"""
@@ -65,38 +66,25 @@ class MCPAdManagerEnhancedUltimateServer:
         
         return self.client
 
-    def _get_admanager_client_with_adc(self):
-        """使用Application Default Credentials获取Ad Manager客户端对象"""
-        if not ADMANAGER_AVAILABLE:
-            raise ValueError("Ad Manager SDK 未安装。请运行: pip install google-ads-admanager 或 pip install googleads")
-        
+    def _get_credentials(self):
+        """获取Google认证凭据，优先使用GOOGLE_APPLICATION_CREDS环境变量指定的文件"""
         try:
-            # 使用Application Default Credentials
-            credentials, project = default(scopes=[
-                "https://www.googleapis.com/auth/dfp"
-            ])
-            
-            # 尝试使用新的 google-ads-admanager
-            if 'NetworkServiceClient' in globals():
-                # 新版本直接使用服务客户端
-                from google.ads.admanager import NetworkServiceClient
-                client = NetworkServiceClient(credentials=credentials)
-            # 否则使用旧的 googleads
-            elif 'ad_manager' in globals():
-                # 旧版本需要配置文件，但我们可以尝试使用环境变量
-                import os
-                network_code = os.getenv('GOOGLE_ADMANAGER_NETWORK_CODE')
-                if not network_code:
-                    raise ValueError("需要设置 GOOGLE_ADMANAGER_NETWORK_CODE 环境变量")
-                
-                client = ad_manager.AdManagerClient.LoadFromStorage()
+            # 检查是否设置了GOOGLE_APPLICATION_CREDS环境变量
+            creds_path = os.getenv('GOOGLE_APPLICATION_CREDS')
+            if creds_path and os.path.exists(creds_path):
+                print(f"✅ 使用指定的认证文件: {creds_path}", file=sys.stderr)
+                credentials = service_account.Credentials.from_service_account_file(
+                    creds_path,
+                    scopes=["https://www.googleapis.com/auth/dfp"]
+                )
+                return credentials, None
             else:
-                raise ValueError("无法导入 Ad Manager 客户端")
-            
-            print("✅ Ad Manager 客户端初始化成功 (使用ADC)", file=sys.stderr)
-            return client
+                # 如果没有设置环境变量或文件不存在，使用默认的Application Default Credentials
+                print("⚠️ 未设置GOOGLE_APPLICATION_CREDS环境变量，使用默认认证", file=sys.stderr)
+                return default(scopes=["https://www.googleapis.com/auth/dfp"])
         except Exception as e:
-            raise ValueError(f"无法初始化Ad Manager客户端: {str(e)}")
+            print(f"❌ 认证失败: {str(e)}", file=sys.stderr)
+            raise ValueError(f"无法获取认证凭据: {str(e)}")
 
     def handle_initialize(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """处理MCP初始化请求"""
@@ -364,9 +352,10 @@ class MCPAdManagerEnhancedUltimateServer:
                                 "GOOGLE_ADMANAGER_NETWORK_CODE": "Ad Manager网络代码（可选）"
                             },
                             "authentication": {
-                                "method": "使用gcloud application-default登录",
-                                "command": "gcloud auth application-default login",
-                                "credentials_file": "~/.config/gcloud/application_default_credentials.json"
+                                "method": "使用GOOGLE_APPLICATION_CREDS环境变量指定认证文件",
+                                "environment_variable": "GOOGLE_APPLICATION_CREDS",
+                                "example": "export GOOGLE_APPLICATION_CREDS=/root/.gcloud/aaa.json",
+                                "fallback": "如果未设置环境变量，将使用默认的application_default_credentials.json"
                             }
                         },
                         "timestamp": datetime.now().isoformat()
@@ -379,10 +368,8 @@ class MCPAdManagerEnhancedUltimateServer:
         """管理Ad Manager网络"""
         print(f"🔍 manage_networks 被调用，action: {action}")
         try:
-            # 使用Application Default Credentials
-            credentials, project = default(scopes=[
-                "https://www.googleapis.com/auth/dfp"
-            ])
+            # 使用新的认证方法
+            credentials, project = self._get_credentials()
             print(f"✅ 获取到凭证，项目: {project}")
             
             # 尝试使用新的 google-ads-admanager
@@ -533,10 +520,8 @@ class MCPAdManagerEnhancedUltimateServer:
                         ad_unit_id: str = None, ad_unit_name: str = None) -> Dict[str, Any]:
         """管理Ad Manager库存"""
         try:
-            # 使用Application Default Credentials
-            credentials, project = default(scopes=[
-                "https://www.googleapis.com/auth/dfp"
-            ])
+            # 使用新的认证方法
+            credentials, project = self._get_credentials()
             
             # 尝试使用新的 google-ads-admanager
             try:
@@ -696,10 +681,8 @@ class MCPAdManagerEnhancedUltimateServer:
                      order_name: str = None, advertiser_id: str = None) -> Dict[str, Any]:
         """管理Ad Manager订单"""
         try:
-            # 使用Application Default Credentials
-            credentials, project = default(scopes=[
-                "https://www.googleapis.com/auth/dfp"
-            ])
+            # 使用新的认证方法
+            credentials, project = self._get_credentials()
             
             # 尝试使用新的 google-ads-admanager
             try:
@@ -824,10 +807,8 @@ class MCPAdManagerEnhancedUltimateServer:
                          line_item_id: str = None, line_item_name: str = None) -> Dict[str, Any]:
         """管理Ad Manager行项目"""
         try:
-            # 使用Application Default Credentials
-            credentials, project = default(scopes=[
-                "https://www.googleapis.com/auth/dfp"
-            ])
+            # 使用新的认证方法
+            credentials, project = self._get_credentials()
             
             # 尝试使用新的 google-ads-admanager
             try:
@@ -959,10 +940,8 @@ class MCPAdManagerEnhancedUltimateServer:
     def manage_creatives(self, action: str, creative_id: str = None) -> Dict[str, Any]:
         """管理Ad Manager创意"""
         try:
-            # 使用Application Default Credentials
-            credentials, project = default(scopes=[
-                "https://www.googleapis.com/auth/dfp"
-            ])
+            # 使用新的认证方法
+            credentials, project = self._get_credentials()
             
             # 尝试使用新的 google-ads-admanager
             try:
@@ -1084,10 +1063,8 @@ class MCPAdManagerEnhancedUltimateServer:
                        end_date: str = None) -> Dict[str, Any]:
         """生成Ad Manager报告"""
         try:
-            # 使用Application Default Credentials
-            credentials, project = default(scopes=[
-                "https://www.googleapis.com/auth/dfp"
-            ])
+            # 使用新的认证方法
+            credentials, project = self._get_credentials()
             
             # 尝试使用新的 google-ads-admanager
             try:
